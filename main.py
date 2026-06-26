@@ -31,17 +31,46 @@ def rgb_to_ycbcr(image_rgb):
   
   return np.clip(image_ycbcr, 0, 255).astype(np.uint8)
 
+def pad_image_to_block_size(image, block_size, mode="edge"):
+  height, width = image.shape[:2]
+  vert_rem, horz_rem = height % block_size, width % block_size
+  vert_pad = block_size - vert_rem if vert_rem != 0 else 0
+  horz_pad = block_size - horz_rem if horz_rem != 0 else 0
+  pads = [
+    (0, vert_pad),
+    (0, horz_pad),
+  ]
+  if image.ndim == 3: 
+    pads += [(0, 0)]
+  return np.pad(image, pads, mode=mode)
+
+def subsample_420(channel):
+  height, width = channel.shape
+  blocks = channel.reshape(height // 2, 2, width // 2, 2)
+  subsampled = blocks.mean(axis=(1, 3))
+  return subsampled.astype(np.uint8)
+
 def main(
   path: str,
   show: bool = False
 ):
   original_image = Image.open(path)
   image_rgb = np.array(original_image.convert("RGB"))
+
+  # Stage 1. RGB -> YCbCr color conversion
   image_ycbcr = rgb_to_ycbcr(image_rgb)
+  image_ycbcr_p = pad_image_to_block_size(image_ycbcr, block_size=2)
+  Y  = image_ycbcr_p[:, :, 0]
+  Cb = image_ycbcr_p[:, :, 1]
+  Cr = image_ycbcr_p[:, :, 2]
+
+  # Stage 2. Chroma subsampling
+  Cb_sub = subsample_420(Cb)
+  Cr_sub = subsample_420(Cr)
 
   if show:
     # original_image.show()
-    Image.fromarray(image_ycbcr).show()
+    Image.fromarray(image_ycbcr_p).show()
 
 if __name__ == "__main__":
   typer.run(main)
