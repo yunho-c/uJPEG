@@ -50,6 +50,30 @@ def subsample_420(channel):
   subsampled = blocks.mean(axis=(1, 3))
   return subsampled.astype(np.uint8)
 
+def generate_dct_matrix(N=8):
+  D = np.zeros((N, N))
+  for i in range(N):
+    alpha = np.sqrt(1 / N) if i == 0 else np.sqrt(2 / N)
+    for j in range(N):
+      D[i, j] = alpha * np.cos((np.pi * (2 * j + 1) * i) / (2 * N))
+  return D
+
+D = generate_dct_matrix()
+
+def apply_dct(channel, inverse=False):
+  height, width = channel.shape
+  # reshape into 8x8 blocks using "Grid of Grids" trick
+  blocks = channel.reshape(height // 8, 8, width // 8, 8)
+
+  # perform matrix multiplication on every block at once
+  if not inverse: # forward
+    dct_blocks = D @ blocks @ D.T
+  else: # inverse
+    dct_blocks = D.T @ blocks @ D
+
+  # reshape back into 2D image
+  return dct_blocks.transpose(0, 2, 1, 3).reshape(height, width)
+
 def main(
   path: str,
   show: bool = False
@@ -68,6 +92,20 @@ def main(
   Cb_sub = subsample_420(Cb)
   Cr_sub = subsample_420(Cr)
 
+  # Level shifting
+  Y      -= 128
+  Cb_sub -= 128
+  Cr_sub -= 128
+
+  # Stage 3. Discrete cosine transform (DCT)
+  Y      = pad_image_to_block_size(Y     , block_size=8)
+  Cb_sub = pad_image_to_block_size(Cb_sub, block_size=8)
+  Cr_sub = pad_image_to_block_size(Cr_sub, block_size=8)
+
+  Y_dct      = apply_dct(Y)
+  Cb_sub_dct = apply_dct(Cb_sub)
+  Cr_sub_dct = apply_dct(Cr_sub)
+  
   if show:
     # original_image.show()
     Image.fromarray(image_ycbcr_p).show()
