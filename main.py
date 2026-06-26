@@ -63,7 +63,7 @@ D = generate_dct_matrix()
 def apply_dct(channel, inverse=False):
   height, width = channel.shape
   # reshape into 8x8 blocks using "Grid of Grids" trick
-  blocks = channel.reshape(height // 8, 8, width // 8, 8)
+  blocks = channel.reshape(height // 8, 8, width // 8, 8).transpose(0, 2, 1, 3)
 
   # perform matrix multiplication on every block at once
   if not inverse: # forward
@@ -71,11 +71,49 @@ def apply_dct(channel, inverse=False):
   else: # inverse
     dct_blocks = D.T @ blocks @ D
 
-  # reshape back into 2D image
-  return dct_blocks.transpose(0, 2, 1, 3).reshape(height, width)
+  return dct_blocks
+
+# Standard luminance (Y) quantization table (quality 50)
+# ITU-T T.81 specification (Annex K.1)
+LUMA_QUANT_TABLE = np.array([
+  [16, 11, 10, 16, 24 , 40 , 51 , 61 ],
+  [12, 12, 14, 19, 26 , 58 , 60 , 55 ],
+  [14, 13, 16, 24, 40 , 57 , 69 , 56 ],
+  [14, 17, 22, 29, 51 , 87 , 80 , 62 ],
+  [18, 22, 37, 56, 68 , 109, 103, 77 ],
+  [24, 35, 55, 64, 81 , 104, 113, 92 ],
+  [49, 64, 78, 87, 103, 121, 120, 101],
+  [72, 92, 95, 98, 112, 100, 103, 99 ]
+], dtype=np.uint8)
+
+# Standard chrominance (Cb/Cr) quantization table (quality 50)
+CHROMA_QUANT_TABLE = np.array([
+  [17, 18, 24, 47, 99, 99, 99, 99],
+  [18, 21, 26, 66, 99, 99, 99, 99],
+  [24, 26, 56, 99, 99, 99, 99, 99],
+  [47, 66, 99, 99, 99, 99, 99, 99],
+  [99, 99, 99, 99, 99, 99, 99, 99],
+  [99, 99, 99, 99, 99, 99, 99, 99],
+  [99, 99, 99, 99, 99, 99, 99, 99],
+  [99, 99, 99, 99, 99, 99, 99, 99]
+], dtype=np.uint8)
+
+def quantize(dct_blocks, chroma=False, inverse=False):
+  quant_table = CHROMA_QUANT_TABLE if chroma else LUMA_QUANT_TABLE
+  if not inverse:
+    divided = dct_blocks / quant_table
+    return np.round(divided).astype(np.int16)
+  else:
+    return dct_blocks * quant_table
+  
+def encode():
+  pass
+
+def decode():
+  pass
 
 def main(
-  path: str,
+  path: Path,
   show: bool = False
 ):
   original_image = Image.open(path)
@@ -105,6 +143,11 @@ def main(
   Y_dct      = apply_dct(Y)
   Cb_sub_dct = apply_dct(Cb_sub)
   Cr_sub_dct = apply_dct(Cr_sub)
+
+  # Stage 4. Quantization
+  Y_dct_q      = quantize(Y_dct)
+  Cb_sub_dct_q = quantize(Cb_sub_dct, chroma=True)
+  Cr_sub_dct_q = quantize(Cr_sub_dct, chroma=True)
   
   if show:
     # original_image.show()
