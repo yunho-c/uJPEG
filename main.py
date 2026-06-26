@@ -9,14 +9,39 @@ import numpy as np
 import typer
 from PIL import Image
 
+def rgb_to_ycbcr(image_rgb):
+  coefs = np.array([
+    [ 0.299,     0.587,     0.114   ],
+    [-0.168736, -0.331264,  0.5     ],
+    [ 0.5,      -0.418688, -0.081312]
+  ])
+  offset = np.array([0, 128, 128])
+
+  image_ycbcr = image_rgb @ coefs.T + offset
+
+  # or more readable (but slightly slower) way:
+  # R = image_rgb[:, :, 0]
+  # G = image_rgb[:, :, 1]
+  # B = image_rgb[:, :, 2]
+
+  # Y  =  0.299 * R + 0.587 * G + 0.114 * B
+  # Cb = -0.168736 * R - 0.331264 * G + 0.5 * B + 128
+  # Cr =  0.5 * R - 0.418688 * G - 0.081312 * B + 128
+  # iamge_ycbcr = np.stack([Y, Cb, Cr], axis=-1)
+  
+  return np.clip(image_ycbcr, 0, 255).astype(np.uint8)
+
 def main(
-  path: str, 
+  path: str,
   show: bool = False
 ):
   original_image = Image.open(path)
+  image_rgb = np.array(original_image.convert("RGB"))
+  image_ycbcr = rgb_to_ycbcr(image_rgb)
 
   if show:
-    original_image.show()
+    # original_image.show()
+    Image.fromarray(image_ycbcr).show()
 
 if __name__ == "__main__":
   typer.run(main)
